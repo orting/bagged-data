@@ -28,6 +28,6 @@
 *.out
 *.app
 
-Build/
+build/
 
 *~
