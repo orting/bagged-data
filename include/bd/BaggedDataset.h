@@ -3,7 +3,9 @@
 
 #include <stdexcept>
 #include <type_traits>
+#include <map>
 #include "Eigen/Dense"
+#include "IO.h"
 
 template< int BagLabelDim=1, int InstanceLabelDim=1 >
 class BaggedDataset {
@@ -208,6 +210,79 @@ public:
   }
 
 
+  std::ostream& SaveText( std::ostream& os ) const {
+    os << "bag,label";
+    for (size_t i = 1; i <= Dimension(); ++i) {
+      os << ",V" << i;
+    }
+    os << "\n";
+    for ( size_t i = 0; i < NumberOfInstances(); ++i ) {
+      os << m_BagMembershipIndices(i) << "," << m_InstanceLabels(i);
+      auto row = m_Instances.row(i);
+      for ( int j = 0; j < row.size(); ++j ) {
+	os << "," << row(j);
+      }
+      os << "\n";
+    }
+    os << std::flush;
+    return os;
+  }
+
+
+  /* Load a bagged dataset from a csv file with format
+   * <bag-id>,<label>,<feature>+
+   * where each row is an instance in a bag
+   */
+  static Self
+  LoadText( std::istream& is, bool header=false ) {
+    if ( header ) {
+      is.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+    }
+    std::vector<double> buffer;
+    std::pair<size_t, size_t> size = readTextMatrix<double, char>(is, std::back_inserter(buffer));    
+
+    const size_t nInstances = size.first;
+    const size_t nFeatures = size.second - 2;
+    assert(nFeatures < size.second);
+    
+    MatrixType instances( nInstances, nFeatures );
+    InstanceLabelVectorType instanceLabels( nInstances, 1 );
+    IndexVectorType bagMembershipIndices( nInstances );
+    std::map<size_t, size_t> id2idx;
+
+    size_t bagIdx = 0;
+    for (size_t i = 0; i < nInstances; ++i) {
+      size_t idx = i*size.second;
+      size_t bagId = static_cast<size_t>(buffer[idx]);
+      if ( id2idx.count(bagId) == 0 ) {
+	id2idx[bagId] = bagIdx++;
+      }
+      bagMembershipIndices(i) = id2idx[bagId];
+      instanceLabels(i) = buffer[1+idx];
+      for (size_t j = 0; j < nFeatures; ++j) {
+	instances(i,j) = buffer[j+2+idx];
+      }
+    }
+
+    const size_t nBags = id2idx.size();
+    
+    // Now we aggregate the instance labels into a bag label by taking the mean
+    // of the instance labels
+    BagLabelVectorType bagLabels = BagLabelVectorType::Zero(nBags, 1);
+    BagLabelVectorType bagSizes = BagLabelVectorType::Zero(nBags, 1);
+    for ( size_t i = 0; i < nInstances; ++i ) {
+      bagLabels(bagMembershipIndices(i)) += instanceLabels(i);
+      bagSizes(bagMembershipIndices(i)) += 1;
+    }
+
+    for ( size_t i = 0; i < nBags; ++i ) {
+      bagLabels(i) /= bagSizes(i);
+    }
+
+    return Self( instances, bagMembershipIndices, bagLabels, instanceLabels );
+  }
+  
+  
   inline bool operator==(const Self& o) const {
     return
       ( m_Instances.rows() == o.m_Instances.rows() ) &&

@@ -9,7 +9,7 @@
 
 #include "gtest/gtest.h"
 
-#include "bd/BaggedDataset.h"
+#include "BaggedDataset.h"
 
 const size_t InstanceLabelDim = 3;
 const size_t BagLabelDim = 2;
@@ -17,6 +17,7 @@ const size_t BagLabelDim = 2;
 
 class BaggedDatasetTest : public ::testing::Test {
 public:
+  typedef BaggedDataset< 1, 1 > SimpleBaggedDatasetType;
   typedef BaggedDataset< BagLabelDim, InstanceLabelDim > BaggedDatasetType;
   typedef BaggedDatasetType::MatrixType MatrixType;
   typedef BaggedDatasetType::IndexVectorType IndexVectorType;
@@ -134,6 +135,57 @@ TEST_F( BaggedDatasetTest, LoadSave ) {
 
   ASSERT_EQ( bags, bags2 );
 }
+
+TEST_F( BaggedDatasetTest, LoadTextSmall ) {
+  typedef BaggedDataset< 1, 1 > SimpleBaggedDatasetType;
+  std::string path = "data/Small.bags";
+  std::ifstream is(path);
+  SimpleBaggedDatasetType smallBags = SimpleBaggedDatasetType::LoadText( is );
+
+  ASSERT_EQ(4, smallBags.NumberOfBags());
+  ASSERT_EQ(4, smallBags.NumberOfInstances());
+  ASSERT_EQ(4, smallBags.Dimension());
+
+  double n = 1;
+  for (size_t i = 0; i < smallBags.NumberOfInstances(); ++i ) {
+    for (size_t j = 0; j < smallBags.Dimension(); ++j ) {
+      ASSERT_NEAR(n++, smallBags.Instances()(i,j), 1e-6);
+    }
+  }
+
+}
+
+TEST_F( BaggedDatasetTest, LoadSaveLoadTextSmall ) {
+  std::string path = "data/Small.bags"; 
+  std::ifstream is(path);
+  SimpleBaggedDatasetType smallBags = SimpleBaggedDatasetType::LoadText( is );
+
+  std::string path2 = "data/Small.saved.bags"; 
+  std::ofstream os(path2);
+  smallBags.SaveText( os );
+
+  std::ifstream is2(path2);
+  SimpleBaggedDatasetType smallBags2 = SimpleBaggedDatasetType::LoadText( is2, true );
+
+  ASSERT_EQ(smallBags, smallBags2);
+}
+
+
+TEST_F( BaggedDatasetTest, LoadSaveLoadTextBig ) {  
+  std::string orgpath = "data/D1-meanmidpoints.test.bags.csv";
+  std::ifstream orgis( orgpath );
+  SimpleBaggedDatasetType orgbags = SimpleBaggedDatasetType::LoadText( orgis, true );
+
+  std::string path = "data/big.saved.bags";
+  std::ofstream os( path );
+  orgbags.SaveText( os );
+
+  std::ifstream is( path );
+  SimpleBaggedDatasetType bags2 = SimpleBaggedDatasetType::LoadText( is, true );
+
+  ASSERT_EQ( orgbags, bags2 );
+}
+
 
 
 TEST_F( BaggedDatasetTest, Join ) {
